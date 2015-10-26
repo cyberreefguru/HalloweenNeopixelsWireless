@@ -6,27 +6,10 @@
  *
  */
 
-#include "NeoWirelessServer.h"
-
-void check_radio(void);
-
-// Hardware configuration
-RF24 radio(7, 8); // ce=7, cs=8
-
-// Set address for channels
-byte addresses[][6] = {"1node", "2node", "3node", "4node", "5node", "6node" };
-
-#define NUM_NODES	2
-
-static uint32_t message_count = 0;
-static uint32_t message_good = 0;
-static uint32_t message_fail = 0;
-static uint8_t commandBuffer[MAX_COMMAND_SIZE];
-
-uint8_t sendCommand();
-uint8_t sendCommand(uint8_t channel);
+#include "HalloweenWirelessServer.h"
 
 void test();
+void selectCrossover();
 
 /**
  *
@@ -38,24 +21,18 @@ void setup()
     printf_begin();
     printf("\n\rNeoPixelWirelessServer\n\r");
 
-    // Setup and configure radio
-    radio.begin();
-    radio.enableAckPayload(); // enable payload ack
-    radio.enableDynamicPayloads(); // Ack payloads are dynamic payloads
+	randomSeed(analogRead(0));
+	randomSeed(analogRead(0));
 
-//    radio.openWritingPipe(addresses[0]);
-//    radio.openReadingPipe(1, addresses[1]);
-    radio.printDetails();
-    delay(50);
-//    attachInterrupt(0, check_radio, LOW); // Attach interrupt handler to interrupt #0 (using pin 2) on BOTH the sender and receiver
-
-    for (int i = 0; i < MAX_COMMAND_SIZE; i++)
+    if( wireless.initialize(MODE_SERVER) )
     {
-        commandBuffer[i] = 0xff;
+    	Serial.println(F("Server initialized."));
     }
-
-    radio.powerUp();                        //Power up the radio
-
+    else
+    {
+    	Serial.println(F("Error initializing server."));
+    	Helper::error(ERROR_WIRELESS);
+    }
 }
 
 /**
@@ -63,29 +40,129 @@ void setup()
  */
 void loop()
 {
+	uint8_t * commandBuffer = wireless.getCommandBuffer();
 
-    test();
+	cmdFade = (fade_t *) commandBuffer;
+    cmdFade->command = CMD_FADE;
+    cmdFade->direction = UP;
+    cmdFade->fadeIncrement = 1;
+    cmdFade->fadeTime = 10;
+    cmdFade->color = ORANGE;
+    wireless.sendCommand();
+    delay(10000);
+
+    cmdFade->direction = DOWN;
+    wireless.sendCommand();
+    delay((255*10)+100); // wait while we fade plus some small pad
+
+	selectCrossover();
+
+	cmdFade = (fade_t *) commandBuffer;
+    cmdFade->command = CMD_FADE;
+    cmdFade->direction = UP;
+    cmdFade->color = PURPLE;
+    cmdFade->fadeIncrement = 1;
+    cmdFade->fadeTime = 10;
+    wireless.sendCommand();
+	delay(10000);
+
+    cmdFade->direction = DOWN;
+    wireless.sendCommand();
+    delay((255*10)+100); // wait while we fade plus some small pad
+
+    cmdFade->direction = UP;
+    cmdFade->color = RED;
+    wireless.sendCommand();
+	delay(10000);
+
+	selectCrossover();
+
+	cmdFade = (fade_t *) commandBuffer;
+    cmdFade->command = CMD_FADE;
+    cmdFade->direction = DOWN;
+    cmdFade->color = RED;
+    cmdFade->fadeIncrement = 1;
+    cmdFade->fadeTime = 10;
+    wireless.sendCommand();
+    delay((255*10)+100); // wait while we fade plus some small pad
+
+    cmdFade->direction = UP;
+    cmdFade->color = GREEN;
+    wireless.sendCommand();
+	delay(10000);
+
+    cmdFade->direction = DOWN;
+    wireless.sendCommand();
+    delay((255*10)+100); // wait while we fade plus some small pad
+
+    selectCrossover();
+
+	cmdFade = (fade_t *) commandBuffer;
+    cmdFade->command = CMD_FADE;
+    cmdFade->direction = UP;
+    cmdFade->color = BLUE;
+    cmdFade->fadeIncrement = 1;
+    cmdFade->fadeTime = 10;
+    wireless.sendCommand();
+	delay(10000);
+
+	selectCrossover();
+
+	cmdFade = (fade_t *) commandBuffer;
+    cmdFade->command = CMD_FADE;
+    cmdFade->direction = DOWN;
+    cmdFade->color = BLUE;
+    cmdFade->fadeIncrement = 1;
+    cmdFade->fadeTime = 10;
+    wireless.sendCommand();
+    delay((255*10)+100); // wait while we fade plus some small pad
+
+	selectCrossover();
 
 }
+
+
+/**
+ * Randomly determines if there will be
+ * lightning or strobe.
+ */
+void selectCrossover()
+{
+	if( random(0,100) < 35 )
+	{
+	     cmdStrobe = (strobe_t *) wireless.getCommandBuffer();
+	     cmdStrobe->command = CMD_STROBE;
+	     cmdStrobe->duration = 0;
+	     cmdStrobe->onColor = WHITE;
+	     cmdStrobe->offColor = BLACK;
+	     cmdStrobe->onTime = 25;
+	     cmdStrobe->offTime = 25;
+	     wireless.sendCommand();
+	     delay(random(1000, 3000));
+	}
+}
+
 
 /**
  * Tests all commands
  */void test()
 {
+	 uint8_t * commandBuffer = wireless.getCommandBuffer();
+
      // Test fill
      printf("Fill-White\n\r");
      cmdFill = (fill_t *)commandBuffer;
      cmdFill->command = CMD_FILL;
      cmdFill->color = WHITE;
-     sendCommand();
+     wireless.sendCommand();
      delay(4000);
      printf("Fill-Red\n\r");
      cmdFill->color = RED;
-     sendCommand();
+     wireless.sendCommand();
      delay(4000);
      printf("Fill-Black\n\r");
      cmdFill->color = BLACK;
-     sendCommand();
+     wireless.sendCommand();
      delay(4000);
 
      // Test Fill Pattern
@@ -95,7 +172,7 @@ void loop()
      cmdFillPattern->pattern = 0x03;
 	 cmdFillPattern->onColor = CYAN;
 	 cmdFillPattern->offColor = CRGB::Brown;
-	 sendCommand();
+	 wireless.sendCommand();
 	 delay(4000);
 
     // Test Pattern
@@ -109,7 +186,7 @@ void loop()
     cmdPattern->offColor = WHITE;
     cmdPattern->onTime = 250;
     cmdPattern->offTime = 250;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test Runway
@@ -124,15 +201,15 @@ void loop()
     cmdWipe->offTime = 0;
     cmdWipe->clearAfter = true;
     cmdWipe->clearEnd = true;
-    sendCommand();
+    wireless.sendCommand();
     delay(6000);
 
     cmdWipe->onTime = 50;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     cmdWipe->onTime = 25;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test bounce
@@ -149,7 +226,7 @@ void loop()
     cmdBounce->bounceTime = 0;
     cmdBounce->clearAfter = true;
     cmdBounce->clearEnd = true;
-    sendCommand();
+    wireless.sendCommand();
     delay(6000);
 
     // Test bounce
@@ -158,14 +235,14 @@ void loop()
     cmdBounce->offColor = WHITE;
     cmdBounce->clearAfter = false;
     cmdBounce->clearEnd = false;
-    sendCommand();
+    wireless.sendCommand();
     delay(6000);
 
     // Clear after test
     cmdFill = (fill_t *)commandBuffer;
     cmdFill->command = CMD_FILL;
     cmdFill->color = BLACK;
-    sendCommand();
+    wireless.sendCommand();
 
     // Test Middle
     printf("Middle\n\r");
@@ -179,10 +256,10 @@ void loop()
     cmdMiddle->offTime = 0;
     cmdMiddle->clearAfter = true;
     cmdMiddle->clearEnd = true;
-    sendCommand();
+    wireless.sendCommand();
     delay(2000);
     cmdMiddle->direction = RIGHT;
-    sendCommand();
+    wireless.sendCommand();
     delay(2000);
 
      // Test random flash
@@ -193,7 +270,7 @@ void loop()
      cmdRandomFlash->offColor = BLACK;
      cmdRandomFlash->onTime = 25;
      cmdRandomFlash->offTime = 0;
-     sendCommand();
+     wireless.sendCommand();
      delay(5000);
 
      // Test random flash
@@ -204,15 +281,69 @@ void loop()
      cmdRandomFlash->offColor = RED;
      cmdRandomFlash->onTime = 25;
      cmdRandomFlash->offTime = 0;
-     sendCommand();
+     wireless.sendCommand();
      delay(5000);
+
+     // Test fade
+     printf("Fade - Up/White\n\r");
+     cmdFade = (fade_t *) commandBuffer;
+     cmdFade->command = CMD_FADE;
+     cmdFade->direction = UP;
+     cmdFade->fadeIncrement = 1;
+     cmdFade->fadeTime = 25;
+     cmdFade->color = WHITE;
+     wireless.sendCommand();
+     delay((255*25)+500); // wait while we fade plus some small pad
+
+     printf("Fade - Down/Red\n\r");
+     cmdFade = (fade_t *) commandBuffer;
+     cmdFade->command = CMD_FADE;
+     cmdFade->direction = DOWN;
+     cmdFade->fadeIncrement = 1;
+     cmdFade->fadeTime = 25;
+     cmdFade->color = RED;
+     wireless.sendCommand();
+     delay((255*25)+500); // wait while we fade plus some small pad
+
+     // Test strobe
+     printf("Strobe - White/Black\n\r");
+     cmdStrobe = (strobe_t *) commandBuffer;
+     cmdStrobe->command = CMD_STROBE;
+     cmdStrobe->duration = 0;
+     cmdStrobe->onColor = WHITE;
+     cmdStrobe->offColor = BLACK;
+     cmdStrobe->onTime = 25;
+     cmdStrobe->offTime = 25;
+     wireless.sendCommand();
+     delay(5000);
+
+     printf("Strobe - Green/Blue\n\r");
+     cmdStrobe = (strobe_t *) commandBuffer;
+     cmdStrobe->command = CMD_STROBE;
+     cmdStrobe->duration = 0;
+     cmdStrobe->onColor = GREEN;
+     cmdStrobe->offColor = BLUE;
+     cmdStrobe->onTime = 25;
+     cmdStrobe->offTime = 25;
+     wireless.sendCommand();
+     delay(5000);
+
+     // Test lightning
+     printf("Lightning - White/Black\n\r");
+     cmdLightning = (lightning_t *) commandBuffer;
+     cmdLightning->command = CMD_LIGHTNING;
+     cmdLightning->onColor = YELLOW;
+     cmdLightning->offColor = BLACK;
+     wireless.sendCommand();
+     delay(2000);
+
 
     // Test rainbow
     printf("Rainbow\n\r");
     cmdRainbow = (rainbow_t *) commandBuffer;
     cmdRainbow->command = CMD_RAINBOW;
     cmdRainbow->glitterProbability = 0;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test rainbow
@@ -221,7 +352,7 @@ void loop()
     cmdRainbow->command = CMD_RAINBOW;
     cmdRainbow->glitterProbability = 80;
     cmdRainbow->glitterColor = WHITE;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test rainbow
@@ -230,14 +361,14 @@ void loop()
     cmdRainbow->command = CMD_RAINBOW;
     cmdRainbow->glitterProbability = 80;
     cmdRainbow->glitterColor = BLUE;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test rainbow fade
     printf("Rainbow Fade\n\r");
     cmdRainbowFade = (rainbow_fade_t *) commandBuffer;
     cmdRainbowFade->command = CMD_RAINBOW_FADE;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test confetti
@@ -246,7 +377,7 @@ void loop()
     cmdConfetti->command = CMD_CONFETTI;
     cmdConfetti->color = RED;
     cmdConfetti->numOn = 10;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test confetti
@@ -255,7 +386,7 @@ void loop()
     cmdConfetti->command = CMD_CONFETTI;
     cmdConfetti->color = GREEN;
     cmdConfetti->numOn = 5;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test cylon
@@ -264,104 +395,21 @@ void loop()
     cmdCylon->command = CMD_CYLON;
     cmdCylon->repeat = 0;
     cmdCylon->color = RED;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test BPM
     printf("BPM\n\r");
     cmdBPM = (bpm_t *) commandBuffer;
     cmdBPM->command = CMD_BPM;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
     // Test Juggle
     printf("Juggle\n\r");
     cmdJuggle = (juggle_t *) commandBuffer;
     cmdBPM->command = CMD_JUGGLE;
-    sendCommand();
+    wireless.sendCommand();
     delay(4000);
 
-}
-
-/**
- * Send a command
- */
-uint8_t sendCommand()
-{
-    uint8_t flag = false;
-
-    for(uint8_t i=0; i < NUM_NODES; i++ )
-    {
-    	flag = sendCommand(i);
-    }
-//    flag = radio.writeFast(commandBuffer, MAX_COMMAND_SIZE);
-//    if (!flag)
-//    {
-//        printf("Error sending Command: %d\n\r", commandBuffer[0]);
-//        message_fail++;
-//    }
-
-
-    return flag;
-}
-
-
-uint8_t sendCommand(uint8_t channel)
-{
-	uint8_t flag = false;
-
-    radio.openWritingPipe(addresses[channel]);
-    flag = radio.write( commandBuffer, MAX_COMMAND_SIZE );
-    if( flag == true )
-    {
-    	if( radio.available() )
-    	{
-            radio.read(&message_count, sizeof(message_count));
-            printf("Ack Command 0x%02x from Node %d: %lu\n\r", commandBuffer[0], channel, message_count);
-    	}
-    	else
-    	{
-    		flag = false;
-			printf("Error getting ACK Command 0x%02x from Node %d.\n\r", commandBuffer[0], channel);
-    	}
-    }
-    else
-    {
-			printf("Error sending Command 0x%02x to Node %d.\n\r", commandBuffer[0], channel);
-    }
-	return flag;
-}
-
-
-/**
- *
- */
-void check_radio(void)
-{
-
-    bool tx, fail, rx;
-
-    // What happened?
-    radio.whatHappened(tx, fail, rx);
-
-    if (tx)
-    {
-        // Have we successfully transmitted?
-        message_good++;
-        //		printf("Send:OK\n\r");
-    }
-
-    if (fail)
-    {
-        // Have we failed to transmit?
-        message_fail++;
-        //		printf("Send:Failed\n\r");
-    }
-
-    if (rx || radio.available())
-    {
-        // Did we receive a message?
-        radio.read(&message_count, sizeof(message_count));
-        printf("Ack:%lu\n\r", message_count);
-    }
 }
